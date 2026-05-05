@@ -1,0 +1,5 @@
+numpy>=2.0
+scipy>=1.10
+qiskit>=2.4
+qiskit-aer
+matplotlib
