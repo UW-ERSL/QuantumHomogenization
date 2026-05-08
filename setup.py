@@ -14,4 +14,7 @@ setup(
         "qiskit-aer",
         "matplotlib",
     ],
+    extras_require={
+        "dev": ["pytest>=7.0"],
+    },
 )
