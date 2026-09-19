@@ -161,6 +161,102 @@ def test_pauli_lcu_Ke():
     assert passed, f"K_e Pauli LCU failed (err={err})"
 
 
-if __name__ == "__main__":
-    import pytest
-    pytest.main([__file__, "-v"])
+# ===========================================================================
+# Aim 2: Preconditioner POC (closed-form K_0^{-1})
+# ===========================================================================
+
+def test_aim2_symbol_derivation():
+    """Coupling blocks satisfy required symmetries; symbol matches direct assembly."""
+    from qhomogenize.task4.symbol import (
+        coupling_blocks, check_symmetry, check_zero_row_sum, K0_from_symbol,
+    )
+    from qhomogenize.fea.full_K import assemble_K
+
+    # 1. Symmetry: C_{-d} = C_{d}^T
+    blocks = coupling_blocks(lam=1.0, mu=1.0, a=0.25, b=0.25, phi_deg=90.0)
+    err_sym = check_symmetry(blocks)
+    assert err_sym < 1e-12, f"coupling block symmetry: {err_sym}"
+
+    # 2. Stencil sums to zero (rigid translation null space)
+    err_zero = check_zero_row_sum(blocks)
+    assert err_zero < 1e-12, f"stencil zero row sum: {err_zero}"
+
+    # 3. Big check: K_0 via direct assembly == K_0 via inverse DFT of symbol
+    for M in [2, 4]:
+        a_h = 1.0 / (2 * M)
+        K_direct = assemble_K(M, p=np.ones(M * M), lam=1.0, mu=1.0,
+                              phi_deg=90.0).toarray()
+        K_dft = K0_from_symbol(M, lam=1.0, mu=1.0, a=a_h, b=a_h, phi_deg=90.0)
+        max_imag = float(np.max(np.abs(K_dft.imag)))
+        err = float(np.max(np.abs(K_dft.real - K_direct)))
+        assert max_imag < 1e-10, f"M={M}: K_dft has nontrivial imag: {max_imag}"
+        assert err < 1e-10, f"M={M}: K_dft != K_direct: {err}"
+
+
+def test_aim2_spatial_qft():
+    """Spatial QFT verified against numpy reference at M=2 and M=4."""
+    from qhomogenize.task4.spatial_qft import spatial_qft, spatial_qft_matrix
+    from qiskit.quantum_info import Operator
+
+    for M in [2, 4]:
+        qc = spatial_qft(M)
+        U_qiskit = Operator(qc).data
+        U_ref = spatial_qft_matrix(M)
+        err = float(np.max(np.abs(U_qiskit - U_ref)))
+        assert err < 1e-10, f"M={M}: spatial QFT mismatch: {err}"
+
+
+def test_aim2_symbol_inverse_block_encoding():
+    """U_{Khat0^{-1}} verifies against the classical operator at M=2."""
+    from qhomogenize.task4.build_USymbolInv import (
+        build_USymbolInv, Khat0_inv_diagonal_matrix,
+    )
+
+    M = 2
+    op = Khat0_inv_diagonal_matrix(M)
+    target = (0.5 * (op + op.conj().T)).real
+    be = build_USymbolInv(M)
+    passed, err = be.verify_against(target, atol=1e-10)
+    assert passed, f"U_SymbolInv at M={M}: {err}"
+
+
+def test_aim2_K0_inv_composition():
+    """Full U_{K_0^{-1}} = U_F^dag U_{Khat^{-1}} U_F at M=2."""
+    from qhomogenize.task4.build_UK0_inv import build_UK0_inv, K0_inv_reference
+
+    M = 2
+    be = build_UK0_inv(M)
+    K0_inv_ref = K0_inv_reference(M).real
+    U = be.extract_matrix()
+    err = float(np.max(np.abs(U - K0_inv_ref / be.alpha)))
+    assert err < 1e-10, f"U_K0_inv at M={M}: {err}"
+
+
+@pytest.mark.parametrize("M", [4, 8])
+def test_aim2_K_K0inv_identity_uniform(M):
+    """K * K_0^{-1} = P_zero_mean for uniform material at M=4 and M=8."""
+    from qhomogenize.task4.check_aim2_integration import (
+        check_uniform_material_round_trip,
+    )
+
+    result = check_uniform_material_round_trip(M=M, verbose=False)
+    assert result["err_uniform_round_trip"] < 1e-9, (
+        f"M={M}: round-trip error {result['err_uniform_round_trip']}"
+    )
+    assert result["rank_KK0_inv"] == result["expected_rank"], (
+        f"M={M}: rank mismatch"
+    )
+
+
+def test_aim2_perforated_cell_conditioning():
+    """Preconditioned operator has bounded condition number on perforated cell."""
+    from qhomogenize.task4.check_aim2_integration import check_perforated_cell
+
+    result = check_perforated_cell(M=4, void_fraction=0.25, verbose=False)
+    # Achieved condition number should be moderate (not blowing up)
+    assert result["condition_number"] < 100.0, (
+        f"condition number too large: {result['condition_number']}"
+    )
+    assert result["condition_number"] > 1.0, (
+        f"condition number suspiciously small: {result['condition_number']}"
+    )
