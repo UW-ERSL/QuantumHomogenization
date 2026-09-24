@@ -1,6 +1,7 @@
 numpy>=2.0
 scipy>=1.10
-qiskit>=2.4
+qiskit>=2.0
 qiskit-aer
 matplotlib
-pytest>=7.0
+pylatexenc
+pyqsp

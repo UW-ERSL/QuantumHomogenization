@@ -1,78 +1,124 @@
-# QuantumHomogenization
+# QuantumHomogenize
 
-Quantum block-encoding for computational homogenization.  Two POCs:
+Quantum homogenization via fast inversion, for 2D periodic two-phase elasticity.
 
-- **Aim 1**: Structured operator encoding per Sünderhauf, Campbell & Camps
-  (Quantum 8, 1226 (2024)) for the elasticity stiffness operator
-  $K = A^T D_K A$ on periodic 2D meshes.
-- **Aim 2**: Closed-form preconditioner $K_0^{-1}$ via
-  $U_F^\dagger \, U_{\widehat{K}_0^{-1}} \, U_F$, built on the Aim 1 framework.
+Computational homogenization of a periodic cell on a quantum computer. The
+operator is block-encoded by the companion package
+[`pyblockencode`](https://github.com/UW-ERSL/PyBlockEncode); this package
+preconditions it by fast inversion of the mean part, establishes the
+conditioning results that follow, and reduces the homogenized moduli to scalar
+quadratic forms in the resolvent.
 
 ## Install
 
-```bash
-conda activate quantum
-pip install -e .
+    pip install -r requirements.txt
+
+and install the companion package:
+
+    pip install git+https://github.com/UW-ERSL/PyBlockEncode
+
+`pyqsp` supplies the QSP phase angles and does not build against modern
+setuptools. If it fails:
+
+    pip install "setuptools<60"
+    pip install pyqsp --no-build-isolation
+
+Everything except the phase angles works without it.
+
+## Quick start
+
+```python
+import quantumhomogenize as qh
+
+chi = qh.square_t(m=3, t=2)                    # centred square, v_f = 1/4
+KH, GH, ratio = qh.bulk_shear(3, chi, r=10)    # two scalars, one solve each
+
+circuit, info = qh.encode(qh.PRECONDITIONER(nu=0.3), m=3, materialize=True)
+print(info)                                    # alpha, CX, depth, verification
 ```
 
-## Run tests
+    jupyter lab QuantumHomogenize_Tutorial.ipynb
+    python verify.py                            # every proposition, asserted
+    python -m quantumhomogenize.fastinvert      # the preconditioner circuit
+    python -m quantumhomogenize.scope           # where the constant holds
 
-```bash
-pytest                  # full suite (~30 sec at L=4)
-pytest -v               # verbose output
-pytest -k smoke         # just the import smoke test
-```
+## Layout
 
-Or use VS Code's Testing panel (the flask icon in the left sidebar).
+    QuantumHomogenize/
+      QuantumHomogenize_Tutorial.ipynb   run-through, all outputs executed
+      verify.py                          every proposition, with assertions
+      requirements.txt
+      quantumhomogenize/                 the package
 
-## Run individual modules
+| Module | Contents |
+|---|---|
+| `fourier_symbol` | Closed-form 2x2 symbol of the mean part, inverse, inverse square root |
+| `fastinvert` | Block encoding of `A^{-1/2}`: QFT pair, multiplexed rotation, one ancilla |
+| `macroload` | Macroscopic-strain load; the phase-interior node set |
+| `microstructure` | Centred squares at any volume fraction, with measured oracle costs |
+| `homogenized` | `C^H`, the Voigt term, bulk and shear moduli |
+| `precondition` | `M = A^{-1/2} K^chi A^{-1/2}`; spectrum, kappa, kappa_eff, matrix-free apply |
+| `conditioning` | Effective against worst case; truncation bias; budget insensitivity |
+| `qspdegree` | Polynomial degree on the effective interval |
+| `qsvt` | ChebIter polynomial, QSP phases, solver (vendored) |
+| `fastsolve` | End to end: precondition, QSVT, modulus |
+| `scope` | Where the effective constant holds and where it degrades |
 
-Each module has a `__main__` block with self-tests for development.  Open the
-file in VS Code and press F5, or:
+`qsvt` is extracted from
+[`SpectralCorrectionQSVT`](https://github.com/UW-ERSL/SpectralCorrectionQSVT):
+`ChebIterPolynomial` is the closed-form optimum for the relative residual
+(Gribling, Kerenidis and Szilagyi, arXiv:2109.04248, Cor. 8), and the solver
+follows the real-part extraction of Martyn et al., PRX Quantum 2, 040203 (2021).
+Only what this package uses is vendored, so there is no dependency on that
+repository.
 
-```bash
-python -m qhomogenize.bencode.builder      # 4 reference matrices
-python -m qhomogenize.task1.build_UA       # U_A vs numpy at L=2 and L=4
-python -m qhomogenize.task2.test_K_uniform # full K = A^T D_K A end-to-end
-```
+## What is verified
 
-## Generate figures
+- Symbol against element-by-element assembly, 1e-16, every nu and m.
+- `V^dag V = E_0^{-1} P` and `||V|| = E_0^{-1/2}`, machine precision.
+- `Vhat` unit singular values at every mode, 5e-16.
+- `spec(M) = [1/rho, 1]` exactly, five figures, every nu and m.
+- Load vanishes at every phase-interior node, machine zero, every contrast.
+- Bulk and shear from one quadratic form each, against the full tensor.
+- Discarded spectral weight at the double-precision floor, flat from
+  rho = 1e2 to 1e8; truncation bias 1e-30 to 1e-23.
+- Preconditioner circuit block against the symbol, 2e-15.
+- End-to-end solve within the 1e-3 target at m <= 4.
 
-```bash
-python generate_figures.py
-```
+## What is NOT established
 
-Produces all figures into `./figures/`.  Two figures currently:
-- `headline_cx_scaling.png` — Aim 1 structured-vs-baseline CX scaling
-- `aim2_preconditioner_scaling.png` — Aim 2 preconditioner CX scaling +
-  void-fraction-bounded condition number
+1. **Polylog gate count.** The multiplexers in `fastinvert` are exact but
+   dense: one angle per mode, so CX grows as O(N^2) (76, 280, 1072, 4176 at
+   m = 2..5). The polylog claim needs a register-controlled symbol preparation,
+   an open assumption in the paper, not implemented here.
 
-## Aim 2 headline result
+2. **Finite-contrast orthogonality.** The truncation argument behind the degree
+   claim is proved only in the true-void limit, where disjoint supports give
+   exact orthogonality. At finite contrast the overlap is measured at the
+   double-precision floor across six decades, but the mechanism is
+   unidentified. Spectral correction was tested as a bypass and fails: the
+   corrected eigenvalue is four decades below the approximation interval.
 
-The preconditioned operator $P \cdot K \cdot K_0^{-1} \cdot P$ has a
-**bounded, mesh-quasi-independent condition number** at fixed void fraction:
+3. **kappa_eff grows like log N.** About +0.39 per mesh doubling (2.99, 3.39,
+   3.77, 4.16 at m = 3..6). Contrast independence holds cleanly; mesh
+   independence does not. The degree claim is O(log N), not O(1).
 
-| Void fraction (achieved) | $\kappa$ at $M=4$ | $\kappa$ at $M=8$ |
-|---|---|---|
-| 25% | 2.90 | 3.78 |
+4. **`fastsolve` uses a dense block encoding**, reintroducing the cost this
+   construction removes, and caps at m = 4. Composing `fastinvert` with
+   `pyblockencode` directly is the naive route the paper argues against; the
+   composition must encode V as one object.
 
-By contrast, $\kappa(K)$ unpreconditioned scales as $M^2$. This validates
-the central scientific claim of the Aim 2 proposal text: the preconditioner
-delivers mesh-independent iteration counts for downstream QSVT-based
-solvers.
+5. **Not implemented.** The geometric-mean form.
 
-The Aim 2 POC validates the *closed-form preconditioner construction*
-(Fourier symbol, spatial QFT, zero-mode handling, integration with the
-Aim 1 $K$).  The CX cost of $U_{K_0^{-1}}$ in isolation is the
-Pauli-LCU baseline cost; a polylog-CX construction via reversible
-trig + arithmetic + reciprocal is documented as future work in
-`qhomogenize/task4/README.md` and was deliberately scoped out of the POC.
+## Conventions
 
-See `qhomogenize/task4/README.md` for the full Aim 2 module structure
-and validation table.
+Paper 1 throughout: `N = 2^m`, dof index `d*N^2 + y*N + x` with x low and y high
+and the displacement qubit most significant, `chi[ex, ey]` the inclusion
+indicator, plane stress with `C = E/(1-nu^2)`. Unit cell with `h = 1/N`: the Q4
+stiffness is scale free in 2D so the operator is unchanged, the load carries one
+factor of h, and `|Omega| = 1`.
 
-## Documentation
-
-See `qhomogenize/README.md` for the package-level documentation, build
-sequence, and headline-result table comparing the structured composition
-to the Pauli-LCU baseline.
+Two choices the draft has not fixed. `A` is the stiff-phase operator
+`max(E1,E2) * K`, giving `alpha_M <= 1` and spectrum `[1/rho, 1]`; the mean part
+`(E1+E2)/2 * K` would give `alpha_M <= 2`. And `rho >= 1` is the contrast, which
+is `max(r, 1/r)` in paper 1's signed `r = E1/E2`.
