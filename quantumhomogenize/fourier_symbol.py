@@ -7,13 +7,14 @@ into one 2x2 acoustic tensor per Fourier mode,
     Khat(p, q) = [[ Sxx, Sxy ],
                   [ Sxy, Syy ]],      p, q in {0, ..., N-1},
 
-with, writing tx = 2 pi p / N, ty = 2 pi q / N and C = E / (1 - nu^2),
+with, writing tx = 2 pi p / N, ty = 2 pi q / N and D the plane-strain matrix
+of `material`,
 
     kx = 4 sin^2(tx/2),   mx = (2 + cos tx) / 3,   sx = sin tx,
 
-    Sxx = C ( kx my + (1-nu)/2 mx ky ),
-    Syy = C ( (1-nu)/2 kx my + mx ky ),
-    Sxy = C (1+nu)/2 sx sy.
+    Sxx = D11 kx my + D33 mx ky,
+    Syy = D33 kx my + D22 mx ky,
+    Sxy = (D12 + D33) sx sy.
 
 These are the eigenvalues of K1 = circ(-1,2,-1), M1 = (1/6) circ(1,4,1) and
 G1 = (1/2) circ(-1,0,1) substituted into Equations (15) to (17). The symbol is
@@ -47,6 +48,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from .material import plane_strain, plane_stress_equivalent
+
 TOL = 1e-12
 
 
@@ -62,15 +65,15 @@ def _factors(m: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def symbol(m: int, nu: float = 0.3, E: float = 1.0) -> np.ndarray:
     """The 2x2 acoustic tensor at every mode. Shape (N, N, 2, 2), real."""
     k, mu, s = _factors(m)
-    C = E / (1 - nu ** 2)
+    D = plane_strain(nu, E)
     kx, ky = k[:, None], k[None, :]
     mx, my = mu[:, None], mu[None, :]
     sx, sy = s[:, None], s[None, :]
 
     out = np.empty((2 ** m, 2 ** m, 2, 2))
-    out[..., 0, 0] = C * (kx * my + (1 - nu) / 2 * mx * ky)
-    out[..., 1, 1] = C * ((1 - nu) / 2 * kx * my + mx * ky)
-    out[..., 0, 1] = out[..., 1, 0] = C * (1 + nu) / 2 * sx * sy
+    out[..., 0, 0] = D[0, 0] * kx * my + D[2, 2] * mx * ky
+    out[..., 1, 1] = D[2, 2] * kx * my + D[1, 1] * mx * ky
+    out[..., 0, 1] = out[..., 1, 0] = (D[0, 1] + D[2, 2]) * sx * sy
     return out
 
 
@@ -147,9 +150,14 @@ def mode_operator_matrix(T: np.ndarray) -> np.ndarray:
 # 3. dense reference, assembled without reference to the symbol
 # ==========================================================================
 def reference(m: int, nu: float = 0.3, E: float = 1.0) -> np.ndarray:
-    """The homogeneous cell assembled element by element from quadrature."""
+    """The homogeneous cell assembled element by element from quadrature.
+
+    Built from the plane-stress element of pyblockencode at the equivalent
+    parameters (E*, nu*), so it shares no code with `symbol`.
+    """
     from pyblockencode import _q4_element, _assemble_periodic
-    return _assemble_periodic(_q4_element(nu, E), 2 ** m, 2)
+    E_s, nu_s = plane_stress_equivalent(nu, E)
+    return _assemble_periodic(_q4_element(nu_s, E_s), 2 ** m, 2)
 
 
 # ==========================================================================

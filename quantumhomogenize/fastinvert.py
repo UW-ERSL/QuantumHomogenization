@@ -63,6 +63,8 @@ from qiskit.circuit.library import UCRYGate
 from qiskit.quantum_info import Statevector
 from qiskit.synthesis import synth_qft_full
 
+from .material import plane_strain
+
 BASIS = ["cx", "u"]
 OPT_LEVEL = 2
 TOL = 1e-12
@@ -84,12 +86,12 @@ def _factors(m: int):
 def symbol(m: int, nu: float = 0.3, E: float = 1.0) -> np.ndarray:
     """The 2x2 acoustic tensor at every mode, from Equations (15) to (17)."""
     k, mu, s = _factors(m)
-    C = E / (1 - nu ** 2)
+    D = plane_strain(nu, E)
     kx, ky, mx, my = k[:, None], k[None, :], mu[:, None], mu[None, :]
     out = np.empty((2 ** m, 2 ** m, 2, 2))
-    out[..., 0, 0] = C * (kx * my + (1 - nu) / 2 * mx * ky)
-    out[..., 1, 1] = C * ((1 - nu) / 2 * kx * my + mx * ky)
-    out[..., 0, 1] = out[..., 1, 0] = C * (1 + nu) / 2 * s[:, None] * s[None, :]
+    out[..., 0, 0] = D[0, 0] * kx * my + D[2, 2] * mx * ky
+    out[..., 1, 1] = D[2, 2] * kx * my + D[1, 1] * mx * ky
+    out[..., 0, 1] = out[..., 1, 0] = (D[0, 1] + D[2, 2]) * s[:, None] * s[None, :]
     return out
 
 
@@ -126,7 +128,7 @@ def gradient_symbol(m: int, nu: float = 0.3) -> np.ndarray:
     Ghat^dag Ghat = Khat exactly.
     """
     N, h = 2 ** m, 1.0 / 2 ** m
-    D = np.array([[1, nu, 0], [nu, 1, 0], [0, 0, (1 - nu) / 2]]) / (1 - nu ** 2)
+    D = plane_strain(nu)
     L = np.linalg.cholesky(D).T
     p = np.arange(N)
     ph = np.exp(-2j * np.pi * np.multiply.outer(p, [o[0] for o in CORNERS]) / N)
@@ -158,7 +160,7 @@ def isometry_symbol(m: int, nu: float = 0.3) -> np.ndarray:
 # ==========================================================================
 @dataclass(frozen=True)
 class PRECONDITIONER:
-    """A^{-1/2} for the periodic plane-stress Q4 cell, as an isometry factor."""
+    """A^{-1/2} for the periodic plane-strain Q4 cell, as an isometry factor."""
     nu: float = 0.3
     kind: ClassVar[str] = "elasticity2d_precond"
 

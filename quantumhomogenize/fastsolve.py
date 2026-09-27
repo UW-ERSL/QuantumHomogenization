@@ -39,7 +39,7 @@ from .qsvt import QSVT
 
 from .macroload import HYDROSTATIC, SHEAR                       
 from .microstructure import square_t                            
-from .homogenized import correction, plane_stress, voigt             
+from .homogenized import correction, voigt
 from .precondition import (apply_half_inverse, effective_interval_dense,
                           kappa, preconditioned, project,
                           spectrum, zero_mean_basis)           

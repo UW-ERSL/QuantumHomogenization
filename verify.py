@@ -12,13 +12,36 @@ import numpy as np
 from pyblockencode import _chi_square
 from quantumhomogenize.conditioning import table_budget, table_effective, table_truncation
 from quantumhomogenize.macroload import HYDROSTATIC, SHEAR, interior_dofs, load
-from quantumhomogenize.homogenized import bulk_shear, homogenized, plane_stress
+from quantumhomogenize.homogenized import bulk_shear, homogenized
+from quantumhomogenize.material import (alpha_closed_form, alpha_two_phase,
+                                        plane_strain, plane_stress_equivalent)
 from quantumhomogenize.precondition import (isometry_residual, kappa, kappa_effective,
                           spectrum)
 from quantumhomogenize.fourier_symbol import (mode_operator_matrix, reference, symbol, symbol_inverse,
                     symbol_inv_sqrt)
 
 NU = 0.3
+
+
+def material(nus=(0.0, 0.1, 0.25, NU, 0.45)):
+    """Plane strain is plane stress at (E*, nu*); alpha carries over."""
+    from pyblockencode import _q4_element, element_alpha
+    from quantumhomogenize.macroload import element
+    print("Material law: plane strain against pyblockencode at (E*, nu*)")
+    print(f"{'nu':>6} {'nu*':>7} {'element':>10} {'alpha 1ph':>10} "
+          f"{'alpha 2ph':>10} {'residual':>10}")
+    for nu in nus:
+        Es, ns = plane_stress_equivalent(nu)
+        Ke, _ = element(nu)
+        e1 = np.abs(Ke - _q4_element(ns, Es)).max()
+        a1 = element_alpha(Ke, 2, 1.0, 1.0)
+        a2 = element_alpha(Ke, 2, 1.0 / 3.75, 1.0)
+        e2 = max(abs(a1 - alpha_closed_form(nu)),
+                 abs(a2 - alpha_two_phase(nu, 1.0 / 3.75, 1.0)))
+        assert max(e1, e2) < 1e-12
+        print(f"{nu:>6.2f} {ns:>7.4f} {e1:>10.2e} {a1:>10.5f} {a2:>10.5f} "
+              f"{e2:>10.2e}")
+    print()
 
 
 def prop1(ms=(2, 3, 4)):
@@ -94,14 +117,14 @@ def prop8(ms=(3, 4, 5)):
             assert e < 1e-12
             print(f"{m:>3} {r:>6} {KH:>10.6f} {GH:>10.6f} {e:>12.2e}")
     C = homogenized(4, _chi_square(0.25, 4), 1.0, 1.0)
-    e = np.abs(C - plane_stress(NU)).max()
+    e = np.abs(C - plane_strain(NU)).max()
     assert e < 1e-12
     print(f"  homogeneous cell returns D_1 to {e:.2e}")
 
 
 if __name__ == "__main__":
     print("----- output --------------------------------------------------")
-    prop1(); prop2(); prop3(); prop4(); prop8()
+    material(); prop1(); prop2(); prop3(); prop4(); prop8()
     print()
     table_effective(); table_truncation(); table_budget()
     print("---------------------------------------------------------------")

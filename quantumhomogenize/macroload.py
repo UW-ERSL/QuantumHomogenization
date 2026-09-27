@@ -35,6 +35,8 @@ import numpy as np
 
 from pyblockencode import CORNERS
 
+from .material import plane_strain
+
 HYDROSTATIC = np.array([1.0, 1.0, 0.0])
 SHEAR = np.array([0.0, 0.0, 1.0])
 
@@ -43,12 +45,12 @@ SHEAR = np.array([0.0, 0.0, 1.0])
 # 1. the element load
 # ==========================================================================
 def element(nu: float = 0.3, h: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
-    """Plane-stress Q4 stiffness (scale free) and load f^e = int B^T D.
+    """Plane-strain Q4 stiffness (scale free) and load f^e = int B^T D.
 
     Returns (8 x 8, 8 x 3). The stiffness is independent of h in 2D; the load
     is proportional to h.
     """
-    D = np.array([[1, nu, 0], [nu, 1, 0], [0, 0, (1 - nu) / 2]]) / (1 - nu ** 2)
+    D = plane_strain(nu)
     g = 1 / np.sqrt(3)
     Ke, fe = np.zeros((8, 8)), np.zeros((8, 3))
     for xi in (-g, g):
