@@ -6,7 +6,7 @@ correction that is the only quantum-hard object,
     C^H = C^Voigt - |Omega|^{-1} F^T (K^chi)^+ F,
     C^Voigt = <E> D_1,      <E> = v_f E_1 + (1 - v_f) E_2,
 
-with D_1 the plane-stress matrix at unit modulus. The classical term is the
+with D_1 the plane-strain matrix at unit modulus. The classical term is the
 energy of the affine field, which is exact on a Q4 element because a constant
 strain state is representable, so no element solve is needed.
 
@@ -39,21 +39,16 @@ import numpy as np
 from scipy.linalg import eigh
 
 from .macroload import HYDROSTATIC, SHEAR, load, stiffness
+from .material import plane_strain
 
 TOL = 1e-9
-
-
-def plane_stress(nu: float = 0.3) -> np.ndarray:
-    """D_1, the plane-stress matrix at unit modulus."""
-    return np.array([[1, nu, 0], [nu, 1, 0],
-                     [0, 0, (1 - nu) / 2]]) / (1 - nu ** 2)
 
 
 def voigt(chi: np.ndarray, E1: float, E2: float,
           nu: float = 0.3) -> np.ndarray:
     """C^Voigt = <E> D_1, the energy of the affine field."""
     vf = float(chi.mean())
-    return (vf * E1 + (1 - vf) * E2) * plane_stress(nu)
+    return (vf * E1 + (1 - vf) * E2) * plane_strain(nu)
 
 
 def correction(m: int, chi: np.ndarray, E1: float, E2: float,
@@ -115,5 +110,5 @@ if __name__ == "__main__":
     print("\nHomogeneous cell reproduces the bulk material")
     chi = _chi_square(0.25, 4)
     C = homogenized(4, chi, 1.0, 1.0)
-    print(f"  max |C^H - D_1| = {np.abs(C - plane_stress(0.3)).max():.2e}")
+    print(f"  max |C^H - D_1| = {np.abs(C - plane_strain(0.3)).max():.2e}")
     print("---------------------------------------------------------------")

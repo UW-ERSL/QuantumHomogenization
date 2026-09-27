@@ -54,6 +54,7 @@ print(info)                                    # alpha, CX, depth, verification
 |---|---|
 | `fourier_symbol` | Closed-form 2x2 symbol of the mean part, inverse, inverse square root |
 | `fastinvert` | Block encoding of `A^{-1/2}`: QFT pair, multiplexed rotation, one ancilla |
+| `material` | Plane-strain `D`; its plane-stress equivalent; `alpha` under plane strain |
 | `macroload` | Macroscopic-strain load; the phase-interior node set |
 | `microstructure` | Centred squares at any volume fraction, with measured oracle costs |
 | `homogenized` | `C^H`, the Voigt term, bulk and shear moduli |
@@ -99,8 +100,9 @@ repository.
    unidentified. Spectral correction was tested as a bypass and fails: the
    corrected eigenvalue is four decades below the approximation interval.
 
-3. **kappa_eff grows like log N.** About +0.39 per mesh doubling (2.99, 3.39,
-   3.77, 4.16 at m = 3..6). Contrast independence holds cleanly; mesh
+3. **kappa_eff grows like log N.** About +0.38 per mesh doubling (2.88, 3.24,
+   3.62, 4.00 at m = 3..6, hydrostatic, rho = 1e4, square v_f = 1/4, plane
+   strain). Contrast independence holds cleanly; mesh
    independence does not. The degree claim is O(log N), not O(1).
 
 4. **`fastsolve` uses a dense block encoding**, reintroducing the cost this
@@ -114,7 +116,12 @@ repository.
 
 Paper 1 throughout: `N = 2^m`, dof index `d*N^2 + y*N + x` with x low and y high
 and the displacement qubit most significant, `chi[ex, ey]` the inclusion
-indicator, plane stress with `C = E/(1-nu^2)`. Unit cell with `h = 1/N`: the Q4
+indicator. The material law is plane strain, since the cell is a transverse
+section of a continuous-fiber composite; `quantumhomogenize/material.py` is the
+one place `D` is built. Plane strain at `(E, nu)` is plane stress at
+`E* = E/(1-nu^2)`, `nu* = nu/(1-nu)`, so paper 1's element and subnormalization
+carry over by substitution: `alpha = E(33-32nu)/(6(1+nu)(1-2nu))` single phase.
+Unit cell with `h = 1/N`: the Q4
 stiffness is scale free in 2D so the operator is unchanged, the load carries one
 factor of h, and `|Omega| = 1`.
 
