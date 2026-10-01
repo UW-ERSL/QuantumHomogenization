@@ -129,3 +129,47 @@ Two choices the draft has not fixed. `A` is the stiff-phase operator
 `max(E1,E2) * K`, giving `alpha_M <= 1` and spectrum `[1/rho, 1]`; the mean part
 `(E1+E2)/2 * K` would give `alpha_M <= 2`. And `rho >= 1` is the contrast, which
 is `max(r, 1/r)` in paper 1's signed `r = E1/E2`.
+
+## Gate-level circuit for the isometry V (`isometry_circuit.py`, `revcirc.py`)
+
+`fastinvert` builds the wavenumber-controlled stage of U_V from tabulated
+multiplexers, which costs O(N^2) gates. `isometry_circuit` replaces the table
+with reversible arithmetic, so the stage costs a number of gates independent
+of N apart from O(log N) for the wavenumber input.
+
+**Factorization.** With phi_j = pi k_j / N, a = sin phi1 cos phi2,
+b = cos phi1 sin phi2, c = sin phi1 sin phi2 and r = (a^2 + b^2)^{1/2},
+
+    Vhat(k) = e^{i(phi1 + phi2)} T . Rpair(2 beta, beta) . F0 . Rpsi(psi1, psi2) . Rq0(-beta),
+
+    beta = atan2(b, a),   psi_i = atan2(G_i c, r),
+
+where T and F0 are fixed 16 x 16 unitaries given in closed form and
+G_1, G_2 depend on nu only. Three angles per wavenumber, no square root, no
+division, no determinant.
+
+**Arithmetic.** a, b, c come from two CORDIC rotations of pi (k1 +- k2)/N;
+beta, psi1, psi2 from three CORDIC vectorings, whose decision bits control
+the rotations directly. Gates are X, CX, CCX (Cuccaro adders); the arithmetic
+is then reversed, so every work wire returns to zero.
+
+**Verified** (`python verify_isometry.py`, about 1 minute):
+
+- adders exhaustively; CORDIC to its truncation error;
+- closed-form factorization to 3e-15 for every k, nu in {-0.3, 0, 0.35, 0.45};
+- gate-level simulation of the whole circuit for every k, N = 4 ... 256,
+  F = 12 ... 32 (39 runs): work register clean in every run, block error
+  delta <= 7 N 2^-F;
+- dense U_V, with the QFT built from gates, against V assembled element by
+  element (N = 8, 16);
+- independently, the exported 727-qubit circuit in Qiskit Aer (MPS) for every
+  k at N = 4, agreeing to 9e-10 (`python verify_isometry.py --aer`).
+
+**Cost per application of U_V:** Toffoli = 51 F^2 + 196 F + 66 + 4 log2 N
+(measured), with F = ceil(log2(7 N / delta)) bits for block error delta;
+about 6F controlled single-qubit rotations; about 4 F^2 qubits (Bennett
+garbage, not optimized). For N = 1024 and delta = 1e-6: F = 33,
+62,270 Toffolis, 4,170 qubits.
+
+Not included: Clifford+T synthesis of the rotations (simulated exactly), and
+qubit-count reduction by pebbling or measurement-based uncomputation.
