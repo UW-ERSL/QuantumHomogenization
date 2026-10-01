@@ -165,9 +165,9 @@ is then reversed, so every work wire returns to zero.
 - independently, the exported 727-qubit circuit in Qiskit Aer (MPS) for every
   k at N = 4, agreeing to 9e-10 (`python verify_isometry.py --aer`).
 
-**Cost per application of U_V:** Toffoli = 51 F^2 + 196 F + 66 + 4 log2 N
+**Cost per application of U_V:** Toffoli = 51 F^2 + 196 F + 38 + 4 log2 N
 (measured), with F = ceil(log2(7 N / delta)) bits for block error delta;
-about 6F controlled single-qubit rotations; about 4 F^2 qubits (Bennett
+5F + 3 controlled single-qubit rotations; about 4 F^2 qubits (Bennett
 garbage, not optimized). For N = 1024 and delta = 1e-6: F = 33,
 62,270 Toffolis, 4,170 qubits.
 
